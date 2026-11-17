@@ -215,8 +215,7 @@ TEST(ScatterNDOpTest, ScatterND_18_add) {
   test1.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider, kOpenVINOExecutionProvider});
 }
 
-// Many updates hitting a handful of output elements: large enough for the CPU kernel to use its thread pool.
-// Every update must be accumulated; a parallel read-modify-write would lose some of them.
+// Test for ScatterND reduction with many duplicate indices, enough to use the thread pool
 TEST(ScatterNDOpTest, ScatterND_18_add_many_duplicate_indices) {
   constexpr int64_t kNumSlots = 4;
   constexpr int64_t kNumUpdates = int64_t{1} << 20;

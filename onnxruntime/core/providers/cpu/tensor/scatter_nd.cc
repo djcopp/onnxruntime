@@ -308,13 +308,8 @@ struct ScatterNDDispatchTarget {
     if (prepare.element_to_copy == 0 || prepare.element_offsets.empty()) {
       return Status::OK();
     }
-    if (prepare.serialize_updates) {
-      tp = nullptr;
-    }
-    // Reductions do a read-modify-write on output elements, and duplicate indices (the usual case for a
-    // reduction) map several updates onto the same element. Applying those updates from multiple threads
-    // races and silently loses writes, so apply reductions serially.
-    if (reduction != ScatterND::Reduction::None) {
+    // reductions with duplicate indices race when run in parallel, so apply them serially.
+    if (prepare.serialize_updates || reduction != ScatterND::Reduction::None) {
       tp = nullptr;
     }
 
