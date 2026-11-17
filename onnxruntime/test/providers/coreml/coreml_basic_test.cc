@@ -3735,6 +3735,64 @@ TEST(CoreMLExecutionProviderTest, GatherScalarIndicesRank5DataNotSupported) {
   TestModelLoad(model_span, MakeCoreMLExecutionProvider("MLProgram"), ExpectedEPNodeAssignment::None);
 }
 
+// Conv with no 'pads' attribute (or auto_pad=VALID) maps to CoreML 'valid' padding. The ML Program
+// conv op still requires a 'pad' input; without it the model fails to compile with
+// "Required param 'pad' is missing". Both variants must run fully on CoreML and match the CPU result.
+static void RunConvValidPaddingMLProgram(const char* auto_pad) {
+  std::unordered_map<std::string, int> domain_to_version{{kOnnxDomain, 13}};
+  onnxruntime::Model model("conv_valid", false, ModelMetaData(), PathString(),
+                           IOnnxRuntimeOpSchemaRegistryList(), domain_to_version, {},
+                           DefaultLoggingManager().DefaultLogger());
+  auto& graph = model.MainGraph();
+  auto make_type = [](std::vector<int64_t> dims) {
+    ONNX_NAMESPACE::TypeProto t;
+    t.mutable_tensor_type()->set_elem_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+    for (auto d : dims) t.mutable_tensor_type()->mutable_shape()->add_dim()->set_dim_value(d);
+    return t;
+  };
+  const auto x_t = make_type({1, 1, 6, 6});
+  const auto y_t = make_type({1, 2, 4, 4});
+  auto& x = graph.GetOrCreateNodeArg("X", &x_t);
+  auto& y = graph.GetOrCreateNodeArg("Y", &y_t);
+  ONNX_NAMESPACE::TensorProto w;
+  w.set_name("W");
+  w.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
+  for (int64_t d : {2, 1, 3, 3}) w.add_dims(d);
+  for (int i = 0; i < 18; ++i) w.add_float_data(0.05f * static_cast<float>(i) - 0.4f);
+  graph.AddInitializedTensor(w);
+  auto& w_arg = graph.GetOrCreateNodeArg("W", nullptr);
+  auto& node = graph.AddNode("conv", "Conv", "", {&x, &w_arg}, {&y});
+  node.AddAttribute("kernel_shape", std::vector<int64_t>{3, 3});
+  if (auto_pad != nullptr) {
+    node.AddAttribute("auto_pad", std::string(auto_pad));
+  }  // else: no 'pads' attribute at all
+  ORT_THROW_IF_ERROR(graph.Resolve());
+  std::string md;
+  model.ToProto().SerializeToString(&md);
+  gsl::span<const std::byte> span{reinterpret_cast<const std::byte*>(md.data()), md.size()};
+#if defined(__APPLE__)
+  std::vector<int64_t> dims = {1, 1, 6, 6};
+  std::vector<float> vals(36);
+  for (int i = 0; i < 36; ++i) vals[i] = static_cast<float>(i % 7) - 3.0f;
+  OrtValue xv;
+  CreateMLValue<float>(CPUAllocator::DefaultInstance(), dims, vals, &xv);
+  NameMLValMap feeds;
+  feeds.insert(std::make_pair("X", xv));
+  RunAndVerifyOutputsWithEP(span, CurrentTestName(),
+                            MakeCoreMLExecutionProvider("MLProgram"),
+                            feeds,
+                            EPVerificationParams{ExpectedEPNodeAssignment::All});
+#endif
+}
+
+TEST(CoreMLExecutionProviderTest, ConvWithoutPadsMLProgram) {
+  RunConvValidPaddingMLProgram(nullptr);
+}
+
+TEST(CoreMLExecutionProviderTest, ConvAutoPadValidMLProgram) {
+  RunConvValidPaddingMLProgram("VALID");
+}
+
 #endif  // !(ORT_MINIMAL_BUILD)
 
 // Verifies that GetProviderOptions reports effective CoreML options using public option names,
