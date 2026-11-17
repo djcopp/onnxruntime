@@ -311,6 +311,12 @@ struct ScatterNDDispatchTarget {
     if (prepare.serialize_updates) {
       tp = nullptr;
     }
+    // Reductions do a read-modify-write on output elements, and duplicate indices (the usual case for a
+    // reduction) map several updates onto the same element. Applying those updates from multiple threads
+    // races and silently loses writes, so apply reductions serially.
+    if (reduction != ScatterND::Reduction::None) {
+      tp = nullptr;
+    }
 
     auto lambda = [&](ptrdiff_t i) {
       switch (reduction) {

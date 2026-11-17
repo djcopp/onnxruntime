@@ -215,6 +215,26 @@ TEST(ScatterNDOpTest, ScatterND_18_add) {
   test1.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider, kOpenVINOExecutionProvider});
 }
 
+// Many updates hitting a handful of output elements: large enough for the CPU kernel to use its thread pool.
+// Every update must be accumulated; a parallel read-modify-write would lose some of them.
+TEST(ScatterNDOpTest, ScatterND_18_add_many_duplicate_indices) {
+  constexpr int64_t kNumSlots = 4;
+  constexpr int64_t kNumUpdates = int64_t{1} << 20;
+  std::vector<int64_t> indices(kNumUpdates);
+  std::vector<float> expected(kNumSlots, 0.0f);
+  for (int64_t i = 0; i < kNumUpdates; ++i) {
+    indices[i] = i % kNumSlots;
+    expected[i % kNumSlots] += 1.0f;
+  }
+  OpTester test("ScatterND", 18);
+  test.AddAttribute("reduction", "add");
+  test.AddInput<float>("data", {kNumSlots}, std::vector<float>(kNumSlots, 0.0f));
+  test.AddInput<int64_t>("indices", {kNumUpdates, 1}, indices);
+  test.AddInput<float>("updates", {kNumUpdates}, std::vector<float>(kNumUpdates, 1.0f));
+  test.AddOutput<float>("output", {kNumSlots}, expected);
+  test.Run(OpTester::ExpectResult::kExpectSuccess, "", {kTensorrtExecutionProvider, kOpenVINOExecutionProvider});
+}
+
 TEST(ScatterNDOpTest, ScatterND_18_mul) {
   OpTester test1("ScatterND", 18);
   test1.AddAttribute("reduction", "mul");
