@@ -429,9 +429,7 @@ void AddPadTypeAndPads(COREML_SPEC::MILSpec::Operation& op, ModelBuilder& model_
       AddOperationInput(op, "pad_type",
                         model_builder.AddScalarConstant(op_type, "pad_type", std::string("valid")));
 
-      // As with 'same' below, CoreML requires a 'pad' input even though it's ignored for 'valid'.
-      // Without it the ML Program fails to compile ("Required param 'pad' is missing"), e.g. for a Conv
-      // without a 'pads' attribute (which falls through to here) or with auto_pad=VALID.
+      // a 'pad' input is required here too. see the 'same' case below.
       std::vector<int64_t> ignored_pads(num_spatial_dims * 2, 0);
       AddOperationInput(op, "pad", model_builder.AddConstant(op_type, "pad", ignored_pads));
 

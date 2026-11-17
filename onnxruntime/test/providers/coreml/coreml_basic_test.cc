@@ -3735,9 +3735,8 @@ TEST(CoreMLExecutionProviderTest, GatherScalarIndicesRank5DataNotSupported) {
   TestModelLoad(model_span, MakeCoreMLExecutionProvider("MLProgram"), ExpectedEPNodeAssignment::None);
 }
 
-// Conv with no 'pads' attribute (or auto_pad=VALID) maps to CoreML 'valid' padding. The ML Program
-// conv op still requires a 'pad' input; without it the model fails to compile with
-// "Required param 'pad' is missing". Both variants must run fully on CoreML and match the CPU result.
+// Conv with no 'pads' attribute (or auto_pad=VALID) maps to CoreML 'valid' padding, which still
+// requires a 'pad' input on the ML Program path.
 static void RunConvValidPaddingMLProgram(const char* auto_pad) {
   std::unordered_map<std::string, int> domain_to_version{{kOnnxDomain, 13}};
   onnxruntime::Model model("conv_valid", false, ModelMetaData(), PathString(),
